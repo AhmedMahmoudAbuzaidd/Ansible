@@ -1,0 +1,7 @@
+---
+- hosts: web
+  remote_user: abuzaid
+  become: yes
+  roles:
+    - sonatype-nexus
+   

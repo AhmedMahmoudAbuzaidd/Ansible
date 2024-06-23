@@ -1,0 +1,106 @@
+- name: apt update and upgrade
+  apt:
+    update_cache: yes
+    upgrade: full 
+
+- name: install java jdk
+  apt:
+    name: openjdk-11-jdk
+    state: present
+
+- name: Verify the installation is done
+  command: "java -version"
+  register: java_version
+
+- name: print java version
+  debug: 
+    var: java_version
+
+- name: create /opt directory
+  file:
+    path: /opt
+    state: directory
+
+- name: create nexus user 
+  user:
+    name: nexus
+    system: yes
+    create_home: yes
+    home: /opt
+    shell: /bin/bash
+
+- name: change ownership /opt dir to nexus user 
+  file:
+    path: /opt
+    state: directory
+    recurse: yes
+    owner: nexus
+    group: nexus
+
+- name: download nexus 
+  get_url:
+    url: https://download.sonatype.com/nexus/3/latest-unix.tar.gz
+    dest: /opt
+
+- name: Extract files 
+  unarchive:
+    src: /opt/nexus-3.69.0-02-unix.tar.gz
+    dest: /opt/
+    remote_src: yes 
+
+- name: Check if /opt/nexus/bin directory exists
+  stat:
+    path: /opt/nexus/bin
+  register: nexus_dir
+
+- name: Copy files and directories to /opt/nexus
+  command: cp -r /opt/nexus-3.69.0-02/. /opt/nexus
+  when: not nexus_dir.stat.exists
+
+- name: change ownership /opt/nexus dir to nexus user 
+  file:
+    path: "{{ dir_dest }}"
+    state: directory
+    recurse: yes
+    owner: nexus
+    group: nexus
+
+- name: change ownership /opt/sonatype-work dir to nexus user 
+  file:
+    path: /opt/sonatype-work
+    state: directory
+    recurse: yes
+    owner: nexus
+    group: nexus
+
+- name: Ensure run_as_user="nexus" is present in the file
+  lineinfile:
+    path: /opt/nexus/bin/nexus.rc
+    line: 'run_as_user="nexus"'
+    state: present
+
+- name:  delete -Djava.endorsed.dirs=lib/endorsed from the file
+  lineinfile:
+    path: /opt/nexus/bin/nexus.vmoptions
+    line: '-Djava.endorsed.dirs=lib/endorsed'
+    state: absent
+
+- name: Copy Nexus systemd service file
+  template:
+    src: nexus.service
+    dest: /etc/systemd/system/nexus.service
+
+- name: Reload systemd to apply new service file
+  command: systemctl daemon-reload
+
+- name: Start nexus service
+  command: systemctl start nexus
+
+- name: Enable Nexus service
+  systemd:
+    name: nexus
+    enabled: yes
+    state: started
+
+- name: Check the status of the Nexus service
+  command: systemctl status nexus
